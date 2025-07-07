@@ -41,7 +41,7 @@ def generate_iif(df):
             desc = row['Description']
             item_code = row['Code']
             amount = -row['Total']
-            output.write(f"SPL\t{trnstype}\t{date_str}\tRevenue:Sales\t{customer}\t{desc} ({item_code})\t{amount:.2f}\n")
+            output.write(f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} ({item_code})\t{amount:.2f}\n")
 
         # Transaction end
         output.write("ENDTRNS\n")
