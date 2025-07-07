@@ -15,7 +15,10 @@ def generate_iif(df):
 
     # Group by Bill#
     for bill_no, bill_df in df.groupby('Bill#'):
-        trans_date = pd.to_datetime(bill_df['Trans Date'].iloc[0])
+        raw_date = bill_df['Trans Date'].iloc[0]
+        cleaned_date = raw_date.replace('.', ':', 2)  # Only replace first 2 dots in time
+        trans_date = pd.to_datetime(cleaned_date, errors='raise')
+
         date_str = trans_date.strftime('%m/%d/%Y')
         day = trans_date.day
         till = bill_df['Till#'].iloc[0]
