@@ -55,6 +55,7 @@ if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file)
         st.success("✅ File uploaded and read successfully.")
+        df.columns = df.columns.str.strip()  # remove spaces around header names
 
         st.subheader("📋 Data Preview")
         st.dataframe(df)
