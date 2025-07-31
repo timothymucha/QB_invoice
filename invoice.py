@@ -10,17 +10,25 @@ def generate_iif(df):
     output.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tMEMO\tAMOUNT\tQNTY\tINVITEM\n")
     output.write("!ENDTRNS\n")
 
-    # Remove voided transactions
-    df = df[~df['Type'].str.lower().str.contains("void")]
+    df.columns = df.columns.str.strip()
+    df['Type'] = df['Type'].str.strip().str.lower()
 
-    # Group by Bill#
+    # Drop exact sale/void offset pairs per bill and item
+    df['key'] = df['Bill#'].astype(str) + "_" + df['Code'].astype(str)
+    void_counts = df[df['Type'] == 'void']['key'].value_counts()
+    sale_counts = df[df['Type'] == 'sale']['key'].value_counts()
+    cancel_keys = void_counts[void_counts == sale_counts].index
+
+    df = df[~df['key'].isin(cancel_keys)]
+    df = df[df['Type'] == 'sale']  # Only process remaining sales
+
     for bill_no, bill_df in df.groupby('Bill#'):
         raw_date = bill_df['Trans Date'].iloc[0]
         cleaned_date = raw_date.replace('.', ':', 2)
         trans_date = pd.to_datetime(cleaned_date, errors='coerce')
 
         if pd.isna(trans_date):
-            continue  # Skip malformed dates
+            continue
 
         date_str = trans_date.strftime('%m/%d/%Y')
         day = trans_date.day
@@ -29,31 +37,25 @@ def generate_iif(df):
         memo = f"Till {till} Bill {bill_no}"
         docnum = f"INV{day:02d}/{int(bill_no):02d}"
 
-        # Determine transaction type
-        is_return = all(bill_df['Type'].str.lower() == 'return')
-        trnstype = "CREDIT MEMO" if is_return else "INVOICE"
-
-        # TRNS Header
+        trnstype = "INVOICE"
         total_amount = bill_df['Total'].sum()
         output.write(f"TRNS\t{trnstype}\t{date_str}\tAccounts Receivable\t{customer}\t{memo}\t{total_amount:.2f}\t{docnum}\n")
 
-        # SPL Lines
         for _, row in bill_df.iterrows():
             desc = str(row['Description']).strip()
             item_code = str(row['Code']).strip()
             qty = row.get('Qty', 1)
-            amount = -row['Total']  # use positive value
-            item = (desc[:31] if len(desc) > 31 else desc)  # 31 char name for QB
+            amount = -abs(row['Total'])  # Ensure amount is negative
+            invitem = desc[:31] if len(desc) > 31 else desc
 
+            memo_line = f"{desc} {item_code}"
             output.write(
-                f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} {item_code}\t{amount:.2f}\t{qty}\t{item}\n"
+                f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{memo_line}\t{amount:.2f}\t{qty}\t{invitem}\n"
             )
 
-        # Transaction end
         output.write("ENDTRNS\n")
 
     return output.getvalue()
-
 
 # Streamlit UI
 st.set_page_config(page_title="QuickBooks IIF Generator", layout="wide")
@@ -65,7 +67,7 @@ if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file)
         st.success("✅ File uploaded and read successfully.")
-        df.columns = df.columns.str.strip()  # remove spaces around header names
+        df.columns = df.columns.str.strip()
 
         st.subheader("📋 Data Preview")
         st.dataframe(df)
