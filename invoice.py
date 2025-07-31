@@ -22,7 +22,7 @@ def generate_iif(df):
         date_str = trans_date.strftime('%m/%d/%Y')
         day = trans_date.day
         till = bill_df['Till#'].iloc[0]
-        customer = "POS Customer"
+        customer = "Walk In"
         memo = f"Till {till} Bill {bill_no}"
         docnum = f"INV{day:02d}/{int(bill_no):02d}"
 
