@@ -3,6 +3,8 @@ import pandas as pd
 from io import StringIO
 
 def generate_iif(df):
+    from io import StringIO
+
     output = StringIO()
 
     # IIF Headers
@@ -13,14 +15,15 @@ def generate_iif(df):
     df.columns = df.columns.str.strip()
     df['Type'] = df['Type'].str.strip().str.lower()
 
-    # Drop exact sale/void offset pairs per bill and item
+    # Add key for identifying sale/void pairs
     df['key'] = df['Bill#'].astype(str) + "_" + df['Code'].astype(str)
-    void_counts = df[df['Type'] == 'void']['key'].value_counts()
-    sale_counts = df[df['Type'] == 'sale']['key'].value_counts()
-    cancel_keys = void_counts[void_counts == sale_counts].index
+
+    # Identify and remove canceling sale/void pairs
+    grouped = df.groupby(['key', 'Type']).size().unstack(fill_value=0)
+    cancel_keys = grouped[(grouped.get('sale', 0) == grouped.get('void', 0))].index
 
     df = df[~df['key'].isin(cancel_keys)]
-    df = df[df['Type'] == 'sale']  # Only process remaining sales
+    df = df[df['Type'] == 'sale'].copy()
 
     for bill_no, bill_df in df.groupby('Bill#'):
         raw_date = bill_df['Trans Date'].iloc[0]
@@ -45,7 +48,7 @@ def generate_iif(df):
             desc = str(row['Description']).strip()
             item_code = str(row['Code']).strip()
             qty = row.get('Qty', 1)
-            amount = -abs(row['Total'])  # Ensure amount is negative
+            amount = row['Total']  # keep positive for sale
             invitem = desc[:31] if len(desc) > 31 else desc
 
             memo_line = f"{desc} {item_code}"
@@ -56,6 +59,7 @@ def generate_iif(df):
         output.write("ENDTRNS\n")
 
     return output.getvalue()
+
 
 # Streamlit UI
 st.set_page_config(page_title="QuickBooks IIF Generator", layout="wide")
