@@ -46,7 +46,7 @@ def generate_iif(df):
             item = (desc[:31] if len(desc) > 31 else desc)  # 31 char name for QB
 
             output.write(
-                f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} ({item_code})\t{amount:.2f}\t{qty}\t{item}\n"
+                f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} {item_code}\t{amount:.2f}\t{qty}\t{item}\n"
             )
 
         # Transaction end
