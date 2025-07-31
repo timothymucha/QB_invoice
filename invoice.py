@@ -34,7 +34,7 @@ def generate_iif(df):
         trnstype = "CREDIT MEMO" if is_return else "INVOICE"
 
         # TRNS Header
-        total_amount = -bill_df['Total'].sum()
+        total_amount = bill_df['Total'].sum()
         output.write(f"TRNS\t{trnstype}\t{date_str}\tAccounts Receivable\t{customer}\t{memo}\t{total_amount:.2f}\t{docnum}\n")
 
         # SPL Lines
@@ -42,7 +42,7 @@ def generate_iif(df):
             desc = str(row['Description']).strip()
             item_code = str(row['Code']).strip()
             qty = row.get('Qty', 1)
-            amount = row['Total']  # use positive value
+            amount = -row['Total']  # use positive value
             item = (desc[:31] if len(desc) > 31 else desc)  # 31 char name for QB
 
             output.write(
