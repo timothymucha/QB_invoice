@@ -7,7 +7,7 @@ def generate_iif(df):
 
     # IIF Headers
     output.write("!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tMEMO\tAMOUNT\tDOCNUM\n")
-    output.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tMEMO\tAMOUNT\n")
+    output.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tMEMO\tAMOUNT\tQNTY\n")
     output.write("!ENDTRNS\n")  # Required third line
 
     # Remove voided transactions
@@ -16,8 +16,11 @@ def generate_iif(df):
     # Group by Bill#
     for bill_no, bill_df in df.groupby('Bill#'):
         raw_date = bill_df['Trans Date'].iloc[0]
-        cleaned_date = raw_date.replace('.', ':', 2)  # Only replace first 2 dots in time
-        trans_date = pd.to_datetime(cleaned_date, errors='raise')
+        cleaned_date = raw_date.replace('.', ':', 2)  # Fix malformed datetime
+        trans_date = pd.to_datetime(cleaned_date, errors='coerce')
+
+        if pd.isna(trans_date):
+            continue  # skip malformed dates
 
         date_str = trans_date.strftime('%m/%d/%Y')
         day = trans_date.day
@@ -41,12 +44,14 @@ def generate_iif(df):
             desc = row['Description']
             item_code = row['Code']
             amount = -row['Total']
-            output.write(f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} ({item_code})\t{amount:.2f}\n")
+            qty = row.get('Qty', 1)
+            output.write(f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} ({item_code})\t{amount:.2f}\t{qty}\n")
 
         # Transaction end
         output.write("ENDTRNS\n")
 
     return output.getvalue()
+
 
 # Streamlit UI
 st.set_page_config(page_title="QuickBooks IIF Generator", layout="wide")
