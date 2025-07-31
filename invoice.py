@@ -7,8 +7,8 @@ def generate_iif(df):
 
     # IIF Headers
     output.write("!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tMEMO\tAMOUNT\tDOCNUM\n")
-    output.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tMEMO\tAMOUNT\tQNTY\n")
-    output.write("!ENDTRNS\n")  # Required third line
+    output.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tMEMO\tAMOUNT\tQNTY\tITEM\n")
+    output.write("!ENDTRNS\n")
 
     # Remove voided transactions
     df = df[~df['Type'].str.lower().str.contains("void")]
@@ -16,11 +16,11 @@ def generate_iif(df):
     # Group by Bill#
     for bill_no, bill_df in df.groupby('Bill#'):
         raw_date = bill_df['Trans Date'].iloc[0]
-        cleaned_date = raw_date.replace('.', ':', 2)  # Fix malformed datetime
+        cleaned_date = raw_date.replace('.', ':', 2)
         trans_date = pd.to_datetime(cleaned_date, errors='coerce')
 
         if pd.isna(trans_date):
-            continue  # skip malformed dates
+            continue  # Skip malformed dates
 
         date_str = trans_date.strftime('%m/%d/%Y')
         day = trans_date.day
@@ -33,19 +33,21 @@ def generate_iif(df):
         is_return = all(bill_df['Type'].str.lower() == 'return')
         trnstype = "CREDIT MEMO" if is_return else "INVOICE"
 
-        # Total amount reversed
-        total_amount = -bill_df['Total'].sum()
-
         # TRNS Header
+        total_amount = -bill_df['Total'].sum()
         output.write(f"TRNS\t{trnstype}\t{date_str}\tAccounts Receivable\t{customer}\t{memo}\t{total_amount:.2f}\t{docnum}\n")
 
         # SPL Lines
         for _, row in bill_df.iterrows():
-            desc = row['Description']
-            item_code = row['Code']
-            amount = -row['Total']
+            desc = str(row['Description']).strip()
+            item_code = str(row['Code']).strip()
             qty = row.get('Qty', 1)
-            output.write(f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} ({item_code})\t{amount:.2f}\t{qty}\n")
+            amount = row['Total']  # use positive value
+            item = (desc[:31] if len(desc) > 31 else desc)  # 31 char name for QB
+
+            output.write(
+                f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{desc} ({item_code})\t{amount:.2f}\t{qty}\t{item}\n"
+            )
 
         # Transaction end
         output.write("ENDTRNS\n")
