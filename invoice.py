@@ -48,7 +48,7 @@ def generate_iif(df):
             desc = str(row['Description']).strip()
             item_code = str(row['Code']).strip()
             qty = row.get('Qty', 1)
-            amount = row['Total']  # keep positive for sale
+            amount = -row['Total']  # keep positive for sale
             invitem = desc[:31] if len(desc) > 31 else desc
 
             memo_line = f"{desc} {item_code}"
