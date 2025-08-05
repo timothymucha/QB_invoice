@@ -2,9 +2,24 @@ import streamlit as st
 import pandas as pd
 from io import StringIO
 
-def generate_iif(df):
-    from io import StringIO
+def remove_void_pairs(df):
+    """
+    Cancels out sale/void pairs one by one.
+    Returns cleaned DataFrame with unmatched sale entries only.
+    """
+    df['key'] = df['Bill#'].astype(str) + "_" + df['Code'].astype(str)
+    cleaned_df = []
 
+    for key, group in df.groupby('key'):
+        sales = group[group['Type'].str.lower() == 'sale']
+        voids = group[group['Type'].str.lower() == 'void']
+        num_to_keep = len(sales) - len(voids)
+        if num_to_keep > 0:
+            cleaned_df.append(sales.iloc[:num_to_keep])
+
+    return pd.concat(cleaned_df) if cleaned_df else pd.DataFrame()
+
+def generate_iif(df):
     output = StringIO()
 
     # IIF Headers
@@ -13,23 +28,14 @@ def generate_iif(df):
     output.write("!ENDTRNS\n")
 
     df.columns = df.columns.str.strip()
-    df['Type'] = df['Type'].str.strip().str.lower()
+    df['Type'] = df['Type'].astype(str).str.strip().str.lower()
 
-    # Add key for identifying sale/void pairs
-    df['key'] = df['Bill#'].astype(str) + "_" + df['Code'].astype(str)
-
-    # Identify and remove canceling sale/void pairs
-    grouped = df.groupby(['key', 'Type']).size().unstack(fill_value=0)
-    cancel_keys = grouped[(grouped.get('sale', 0) == grouped.get('void', 0))].index
-
-    df = df[~df['key'].isin(cancel_keys)]
-    df = df[df['Type'] == 'sale'].copy()
+    df = remove_void_pairs(df)
 
     for bill_no, bill_df in df.groupby('Bill#'):
-        raw_date = bill_df['Trans Date'].iloc[0]
+        raw_date = str(bill_df['Trans Date'].iloc[0])
         cleaned_date = raw_date.replace('.', ':', 2)
         trans_date = pd.to_datetime(cleaned_date, errors='coerce')
-
         if pd.isna(trans_date):
             continue
 
@@ -38,20 +44,21 @@ def generate_iif(df):
         till = bill_df['Till#'].iloc[0]
         customer = "Walk In"
         memo = f"Till {till} Bill {bill_no}"
-        docnum = f"INV{day:02d}/{int(bill_no):02d}"
+        docnum = f"INV{day:02d}/{int(bill_no):04d}"
 
         trnstype = "INVOICE"
         total_amount = bill_df['Total'].sum()
+
         output.write(f"TRNS\t{trnstype}\t{date_str}\tAccounts Receivable\t{customer}\t{memo}\t{total_amount:.2f}\t{docnum}\n")
 
         for _, row in bill_df.iterrows():
-            desc = str(row['Description']).strip()
-            item_code = str(row['Code']).strip()
+            desc = str(row.get('Description', '')).strip()
+            item_code = str(row.get('Code', '')).strip()
             qty = row.get('Qty', 1)
-            amount = -row['Total']  # keep positive for sale
+            amount = -float(row['Total'])  # QuickBooks needs SPL amount negative
             invitem = desc[:31] if len(desc) > 31 else desc
+            memo_line = f"{desc} {item_code}".strip()
 
-            memo_line = f"{desc} {item_code}"
             output.write(
                 f"SPL\t{trnstype}\t{date_str}\tSales Revenue\t{customer}\t{memo_line}\t{amount:.2f}\t{qty}\t{invitem}\n"
             )
