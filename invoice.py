@@ -5,7 +5,7 @@ from io import StringIO
 def remove_void_pairs(df):
     """
     Cancels out sale/void pairs considering quantities.
-    Keeps remaining sales if only part of the quantity is voided.
+    Consolidates into net Qty and Total for each Bill#/Code combo.
     """
     df['key'] = df['Bill#'].astype(str) + "_" + df['Code'].astype(str)
     cleaned_rows = []
@@ -15,20 +15,16 @@ def remove_void_pairs(df):
         voids = group[group['Type'].str.lower() == 'void'].copy()
 
         total_sales_qty = sales['Qty'].sum()
-        total_void_qty = voids['Qty'].sum()
-
+        total_void_qty = abs(voids['Qty'].sum())  # void is negative
         net_qty = total_sales_qty - total_void_qty
 
         if net_qty > 0:
-            # Build a single representative row from first sale entry
+            # Average price per unit from sales only
+            unit_price = sales['Total'].sum() / total_sales_qty if total_sales_qty else 0
+
             row = sales.iloc[0].copy()
             row['Qty'] = net_qty
-
-            # Adjust the total proportionally if 'Total' is available
-            if 'Total' in row:
-                price_per_unit = sales['Total'].sum() / total_sales_qty if total_sales_qty else 0
-                row['Total'] = price_per_unit * net_qty
-
+            row['Total'] = unit_price * net_qty
             cleaned_rows.append(row)
 
     return pd.DataFrame(cleaned_rows) if cleaned_rows else pd.DataFrame()
