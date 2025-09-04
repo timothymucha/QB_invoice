@@ -4,20 +4,34 @@ from io import StringIO
 
 def remove_void_pairs(df):
     """
-    Cancels out sale/void pairs one by one.
-    Returns cleaned DataFrame with unmatched sale entries only.
+    Cancels out sale/void pairs considering quantities.
+    Keeps remaining sales if only part of the quantity is voided.
     """
     df['key'] = df['Bill#'].astype(str) + "_" + df['Code'].astype(str)
-    cleaned_df = []
+    cleaned_rows = []
 
     for key, group in df.groupby('key'):
-        sales = group[group['Type'].str.lower() == 'sale']
-        voids = group[group['Type'].str.lower() == 'void']
-        num_to_keep = len(sales) - len(voids)
-        if num_to_keep > 0:
-            cleaned_df.append(sales.iloc[:num_to_keep])
+        sales = group[group['Type'].str.lower() == 'sale'].copy()
+        voids = group[group['Type'].str.lower() == 'void'].copy()
 
-    return pd.concat(cleaned_df) if cleaned_df else pd.DataFrame()
+        total_sales_qty = sales['Qty'].sum()
+        total_void_qty = voids['Qty'].sum()
+
+        net_qty = total_sales_qty - total_void_qty
+
+        if net_qty > 0:
+            # Build a single representative row from first sale entry
+            row = sales.iloc[0].copy()
+            row['Qty'] = net_qty
+
+            # Adjust the total proportionally if 'Total' is available
+            if 'Total' in row:
+                price_per_unit = sales['Total'].sum() / total_sales_qty if total_sales_qty else 0
+                row['Total'] = price_per_unit * net_qty
+
+            cleaned_rows.append(row)
+
+    return pd.DataFrame(cleaned_rows) if cleaned_rows else pd.DataFrame()
 
 def generate_iif(df):
     output = StringIO()
